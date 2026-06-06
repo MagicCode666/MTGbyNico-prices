@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -28,13 +29,22 @@ def get_retention_days() -> int:
 
 def fetch_download_url() -> tuple[str, str]:
     """Retourne (download_url, updated_at) du bulk default_cards."""
-    resp = requests.get(SCRYFALL_BULK_API, timeout=15)
-    resp.raise_for_status()
-    bulk_list = resp.json().get("data", [])
-    entry = next((b for b in bulk_list if b["type"] == "default_cards"), None)
-    if not entry:
-        raise RuntimeError("Type 'default_cards' introuvable dans l'API Scryfall.")
-    return entry["download_uri"], entry.get("updated_at", "")
+    last_exc: Exception = RuntimeError("unreachable")
+    for attempt in range(1, 4):
+        try:
+            resp = requests.get(SCRYFALL_BULK_API, timeout=20)
+            resp.raise_for_status()
+            bulk_list = resp.json().get("data", [])
+            entry = next((b for b in bulk_list if b["type"] == "default_cards"), None)
+            if not entry:
+                raise RuntimeError("Type 'default_cards' introuvable dans l'API Scryfall.")
+            return entry["download_uri"], entry.get("updated_at", "")
+        except requests.RequestException as exc:
+            last_exc = exc
+            if attempt < 3:
+                print(f"Tentative {attempt}/3 échouée ({exc}), réessai dans 15s...", flush=True)
+                time.sleep(15)
+    raise last_exc
 
 
 def download_bulk(url: str) -> list:
