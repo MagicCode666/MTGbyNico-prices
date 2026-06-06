@@ -14,8 +14,16 @@ from pathlib import Path
 import requests
 
 SCRYFALL_BULK_API = "https://api.scryfall.com/bulk-data"
-RETENTION_DAYS    = 180
-PRICES_DIR        = Path(__file__).parent.parent / "prices"
+_DEFAULT_RETENTION = 180
+PRICES_DIR         = Path(__file__).parent.parent / "prices"
+
+
+def get_retention_days() -> int:
+    config_path = Path(__file__).parent.parent / "config.json"
+    try:
+        return int(json.loads(config_path.read_text(encoding="utf-8")).get("retention_days", _DEFAULT_RETENTION))
+    except Exception:
+        return _DEFAULT_RETENTION
 
 
 def fetch_download_url() -> tuple[str, str]:
@@ -86,8 +94,8 @@ def save_price_file(date_str: str, cards: dict) -> Path:
 
 
 def prune_old_files():
-    """Supprime les fichiers de prix plus anciens que RETENTION_DAYS."""
-    cutoff = (date.today() - timedelta(days=RETENTION_DAYS)).isoformat()
+    """Supprime les fichiers de prix plus anciens que la rétention configurée."""
+    cutoff = (date.today() - timedelta(days=get_retention_days())).isoformat()
     removed = 0
     for f in sorted(PRICES_DIR.glob("*.json")):
         date_str = f.stem
