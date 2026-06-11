@@ -17,6 +17,7 @@ import requests
 SCRYFALL_BULK_API = "https://api.scryfall.com/bulk-data"
 _DEFAULT_RETENTION = 180
 PRICES_DIR         = Path(__file__).parent.parent / "prices"
+HEADERS            = {"User-Agent": "MTGbyNico-prices/1.0 (https://github.com/MagicCode666/MTGbyNico-prices)"}
 
 
 def get_retention_days() -> int:
@@ -32,7 +33,7 @@ def fetch_download_url() -> tuple[str, str]:
     last_exc: Exception = RuntimeError("unreachable")
     for attempt in range(1, 4):
         try:
-            resp = requests.get(SCRYFALL_BULK_API, timeout=20)
+            resp = requests.get(SCRYFALL_BULK_API, timeout=20, headers=HEADERS)
             resp.raise_for_status()
             bulk_list = resp.json().get("data", [])
             entry = next((b for b in bulk_list if b["type"] == "default_cards"), None)
@@ -50,7 +51,7 @@ def fetch_download_url() -> tuple[str, str]:
 def download_bulk(url: str) -> list:
     """Télécharge et parse le bulk JSON Scryfall. Retourne la liste des cartes."""
     print(f"Téléchargement : {url}", flush=True)
-    with requests.get(url, stream=True, timeout=300) as r:
+    with requests.get(url, stream=True, timeout=300, headers=HEADERS) as r:
         r.raise_for_status()
         size_mb = int(r.headers.get("Content-Length", 0)) // (1024 * 1024)
         print(f"Taille estimée : {size_mb} Mo", flush=True)
