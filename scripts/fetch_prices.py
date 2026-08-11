@@ -4,6 +4,7 @@ Télécharge le bulk Scryfall, extrait les prix EUR, sauvegarde prices/YYYY-MM-D
 et son hash SHA256. Supprime les fichiers plus anciens que RETENTION_DAYS.
 Exécuté chaque nuit par GitHub Actions.
 """
+import gzip
 import hashlib
 import json
 import os
@@ -39,7 +40,7 @@ def fetch_download_url() -> tuple[str, str]:
             entry = next((b for b in bulk_list if b["type"] == "default_cards"), None)
             if not entry:
                 raise RuntimeError("Type 'default_cards' introuvable dans l'API Scryfall.")
-            return entry["download_uri"], entry.get("updated_at", "")
+            return entry["jsonl_download_uri"], entry.get("updated_at", "")
         except requests.RequestException as exc:
             last_exc = exc
             if attempt < 3:
@@ -49,12 +50,13 @@ def fetch_download_url() -> tuple[str, str]:
 
 
 def download_bulk(url: str) -> list:
-    """Télécharge et parse le bulk JSON Scryfall. Retourne la liste des cartes."""
+    """Télécharge, décompresse (gzip) et parse le bulk Scryfall (JSON Lines).
+    Retourne la liste des cartes."""
     print(f"Téléchargement : {url}", flush=True)
     with requests.get(url, stream=True, timeout=300, headers=HEADERS) as r:
         r.raise_for_status()
         size_mb = int(r.headers.get("Content-Length", 0)) // (1024 * 1024)
-        print(f"Taille estimée : {size_mb} Mo", flush=True)
+        print(f"Taille estimée (compressée) : {size_mb} Mo", flush=True)
         chunks = []
         downloaded = 0
         for chunk in r.iter_content(chunk_size=512 * 1024):
@@ -62,8 +64,11 @@ def download_bulk(url: str) -> list:
                 chunks.append(chunk)
                 downloaded += len(chunk)
         content = b"".join(chunks)
-    print(f"Téléchargé : {round(len(content) / 1024 / 1024, 1)} Mo", flush=True)
-    return json.loads(content.decode("utf-8"))
+    print(f"Téléchargé : {round(len(content) / 1024 / 1024, 1)} Mo (compressé)", flush=True)
+    decompressed = gzip.decompress(content)
+    cards = [json.loads(line) for line in decompressed.splitlines() if line.strip()]
+    print(f"Décompressé : {round(len(decompressed) / 1024 / 1024, 1)} Mo, {len(cards)} cartes", flush=True)
+    return cards
 
 
 def extract_eur_prices(cards: list) -> dict:
